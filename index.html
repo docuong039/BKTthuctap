@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/path/to/favicon.ico" />
+    <title>JSON to HTML Slides</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        background-color: #f4f4f4;
+        margin: 0;
+      }
+
+      .slides-container {
+        width: 80%;
+        max-width: 1200px;
+        background: white;
+        padding: 20px;
+        box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+        position: relative;
+        cursor: pointer;
+      }
+
+      .slide {
+        display: none;
+        position: relative;
+        width: 100%;
+        min-height: 625px;
+        margin-bottom: 20px;
+        border: 1px solid #ccc;
+        padding: 10px;
+        overflow: visible; /* Đảm bảo nội dung không bị cắt */
+        transition: opacity 0.3s ease-in-out;
+        opacity: 0;
+      }
+
+      .slide.active {
+        display: block;
+        opacity: 1;
+      }
+
+      .dots-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        margin: 0 5px;
+        border-radius: 50%;
+        background-color: #bbb;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .dot:hover {
+        background-color: #666;
+        transform: scale(1.2);
+      }
+
+      .dot.active {
+        background-color: #333;
+      }
+
+      .input-container {
+        margin: 20px 0;
+      }
+
+      input[type="file"] {
+        padding: 5px;
+      }
+
+      .loading {
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 24px;
+        color: #333;
+      }
+
+      .error-placeholder {
+        background-color: #ffe6e6;
+        color: #ff0000;
+        border: 1px solid #ff0000;
+        padding: 10px;
+        text-align: center;
+      }
+
+      img,
+      video {
+        position: relative;
+        z-index: 1;
+        max-width: 100%; /* Đảm bảo không vượt kích thước container */
+        max-height: 100%;
+      }
+
+      img:hover,
+      video:hover {
+        transform: scale(1.05);
+        filter: brightness(1.2);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="input-container">
+      <input
+        type="file"
+        id="mediaFile"
+        accept="application/json,image/*,audio/*"
+        multiple
+        title="Tải JSON, ảnh hoặc âm thanh"
+      />
+    </div>
+    <div class="slides-container" id="slidesContainer">
+      <div class="loading" id="loading">Đang tải...</div>
+    </div>
+    <div class="dots-container" id="dotsContainer"></div>
+
+    <script>
+      function applyStyles(element, styles) {
+        for (const [key, value] of Object.entries(styles)) {
+          try {
+            if (
+              key === "left" ||
+              key === "top" ||
+              key === "width" ||
+              key === "height"
+            ) {
+              element.style[key] = `${value}px`;
+            } else if (key === "transform") {
+              element.style.transform = value;
+            } else if (key === "animation") {
+              element.style.animation = value;
+            } else if (key === "transition") {
+              element.style.transition = value;
+            } else if (key === "filter") {
+              element.style.filter = value;
+            } else if (key === "border") {
+              element.style.border = value;
+            } else if (key === "boxShadow") {
+              element.style.boxShadow = value;
+            } else if (key === "opacity" || typeof value === "number") {
+              element.style[key] = value;
+            } else {
+              element.style[key] = value;
+            }
+          } catch (error) {
+            console.error(`Lỗi khi áp dụng style ${key}:`, error);
+          }
+        }
+      }
+
+      function createElement(elementData) {
+        let el, wrapper;
+
+        console.log(`Đang tạo phần tử: ${elementData.type}`, elementData); // Debug log
+
+        switch (elementData.type) {
+          case "text":
+            el = document.createElement("div");
+            el.innerHTML = elementData.content || "";
+            break;
+
+          case "line":
+            el = document.createElement("div");
+            break;
+
+          /* case "shape":
+            el = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            if (elementData.viewBox)
+              el.setAttribute("viewBox", elementData.viewBox.join(" "));
+            const path = document.createElementNS(
+              "http://www.w3.org/2000/svg",
+              "path"
+            );
+            path.setAttribute("d", elementData.path || "M 0 0");
+            path.setAttribute("fill", elementData.fill || "#000");
+            el.appendChild(path);
+            break; */
+
+          case "video":
+            el = document.createElement("video");
+            el.setAttribute("src", elementData.src || "");
+            el.setAttribute("controls", "controls");
+            if (elementData.autoplay) el.setAttribute("autoplay", "autoplay");
+            // Thêm sự kiện lỗi
+            el.addEventListener("error", () => {
+              console.error(`Lỗi tải video: ${elementData.src}`);
+              el.outerHTML = `<div class="error-placeholder">Không thể tải video: ${elementData.src}</div>`;
+            });
+            break;
+
+          case "audio":
+            el = document.createElement("audio");
+            el.setAttribute("src", elementData.src || "");
+            el.setAttribute("controls", "controls");
+            if (elementData.autoplay) el.setAttribute("autoplay", "autoplay");
+            if (elementData.loop) el.setAttribute("loop", "loop");
+            break;
+
+          case "image":
+            el = document.createElement("img");
+            el.setAttribute("src", elementData.src || "");
+            el.setAttribute("alt", elementData.alt || "Uploaded image");
+            // Thêm sự kiện lỗi
+            el.addEventListener("error", () => {
+              console.error(`Lỗi tải hình ảnh: ${elementData.src}`);
+              el.outerHTML = `<div class="error-placeholder">Không thể tải hình ảnh: ${elementData.src}</div>`;
+            });
+            break;
+
+          default:
+            console.warn(`Loại phần tử không hỗ trợ: ${elementData.type}`);
+            return null;
+        }
+
+        // Tạo wrapper để hỗ trợ colorMask
+        wrapper = document.createElement("div");
+        wrapper.style.position = "absolute";
+        wrapper.style.left = `${elementData.left || 0}px`;
+        wrapper.style.top = `${elementData.top || 0}px`;
+        wrapper.style.width = `${elementData.width || 0}px`;
+        wrapper.style.height = `${elementData.height || 0}px`;
+        wrapper.style.overflow = "visible"; // Đảm bảo nội dung không bị cắt
+
+        // Áp dụng colorMask
+        if (elementData.colorMask) {
+          wrapper.style.backgroundColor = elementData.colorMask;
+        }
+
+        const commonStyles = {
+          position: "absolute",
+          width: "100%",
+          height: "100%",
+          opacity: elementData.opacity !== undefined ? elementData.opacity : 1,
+          transform: `rotate(${elementData.rotate || 0}deg) ${
+            elementData.flipV ? "scaleY(-1)" : ""
+          } ${elementData.flipH ? "scaleX(-1)" : ""}`.trim(),
+          transformOrigin: "center",
+          transition: elementData.transition || "all 0.3s ease",
+        };
+
+        // Xử lý filters (ví dụ: grayscale)
+        if (elementData.filters && elementData.filters.grayscale) {
+          commonStyles.filter = commonStyles.filter
+            ? `${commonStyles.filter} grayscale(${elementData.filters.grayscale})`
+            : `grayscale(${elementData.filters.grayscale})`;
+        }
+
+        // Xử lý outline (dùng border thay thế)
+        if (elementData.outline) {
+          commonStyles.border = `${elementData.outline.width}px ${elementData.outline.style} ${elementData.outline.color}`;
+        }
+
+        // Xử lý shadow
+        if (elementData.shadow) {
+          commonStyles.boxShadow = `${elementData.shadow.h}px ${elementData.shadow.v}px ${elementData.shadow.blur}px ${elementData.shadow.color}`;
+        }
+
+        if (elementData.type === "text") {
+          Object.assign(commonStyles, {
+            color: elementData.defaultColor || "#333",
+            fontFamily: elementData.defaultFontName || "Arial",
+            lineHeight: elementData.lineHeight || "normal",
+            textAlign:
+              elementData.content &&
+              elementData.content.includes("text-align: center")
+                ? "center"
+                : "left",
+            letterSpacing: elementData.wordSpace
+              ? `${elementData.wordSpace}px`
+              : "normal",
+          });
+        } else if (elementData.type === "line") {
+          const lineLength =
+            elementData.end && elementData.start
+              ? elementData.end[0] - elementData.start[0]
+              : 0;
+          Object.assign(commonStyles, {
+            width: lineLength,
+            height: elementData.width || 1,
+            backgroundColor: elementData.color || "#000",
+            border:
+              elementData.style && elementData.style !== "solid"
+                ? `${elementData.width || 1}px ${elementData.style} ${
+                    elementData.color || "#000"
+                  }`
+                : "none",
+          });
+        } else if (elementData.type === "image") {
+          Object.assign(commonStyles, {
+            objectFit: elementData.objectFit || "contain",
+          });
+        }
+
+        try {
+          applyStyles(el, commonStyles);
+          wrapper.appendChild(el);
+          return wrapper;
+        } catch (error) {
+          console.error(
+            `Lỗi khi áp dụng styles cho ${elementData.type}:`,
+            error
+          );
+          return null;
+        }
+      }
+
+      function generateSlides(jsonData) {
+        const container = document.getElementById("slidesContainer");
+        const dotsContainer = document.getElementById("dotsContainer");
+        const loading = document.getElementById("loading");
+        loading.style.display = "block";
+
+        container.innerHTML = "";
+        dotsContainer.innerHTML = "";
+
+        if (!jsonData || !Array.isArray(jsonData)) {
+          alert("Dữ liệu JSON không hợp lệ!");
+          loading.style.display = "none";
+          return;
+        }
+
+        jsonData.forEach((slide, index) => {
+          console.log(`Đang tạo slide ${index + 1}:`, slide); // Debug log
+          const slideElement = document.createElement("div");
+          slideElement.classList.add("slide");
+          slideElement.id =
+            slide.id || `slide-${Math.random().toString(36).substr(2, 9)}`;
+
+          const backgroundStyles = {
+            backgroundColor:
+              slide.background && slide.background.type === "solid"
+                ? slide.background.color
+                : "#ffffff",
+          };
+          applyStyles(slideElement, backgroundStyles);
+
+          if (slide.elements && Array.isArray(slide.elements)) {
+            slide.elements.forEach((elementData) => {
+              const el = createElement(elementData);
+              if (el) {
+                slideElement.appendChild(el);
+              } else {
+                console.warn(`Không thể tạo phần tử:`, elementData);
+              }
+            });
+          } else {
+            console.warn(
+              `Slide ${slide.id} không có elements hoặc elements không phải mảng`
+            );
+          }
+
+          container.appendChild(slideElement);
+
+          const dot = document.createElement("div");
+          dot.classList.add("dot");
+          dot.addEventListener("click", () => showSlide(index));
+          dotsContainer.appendChild(dot);
+        });
+
+        showSlide(0);
+        loading.style.display = "none";
+      }
+
+      let currentSlide = 0;
+
+      function showSlide(index) {
+        const slides = document.querySelectorAll(".slide");
+        const dots = document.querySelectorAll(".dot");
+        if (slides.length === 0 || dots.length === 0) return;
+
+        slides.forEach((slide) => slide.classList.remove("active"));
+        dots.forEach((dot) => dot.classList.remove("active"));
+
+        if (index >= 0 && index < slides.length) {
+          slides[index].classList.add("active");
+          dots[index].classList.add("active");
+          console.log(`Hiển thị slide ${index + 1}`); // Debug log
+        }
+        currentSlide = index;
+      }
+
+      document
+        .getElementById("mediaFile")
+        .addEventListener("change", function (event) {
+          const files = Array.from(event.target.files);
+          files.forEach((file) => {
+            if (file.type.match("application/json")) {
+              const reader = new FileReader();
+              reader.onload = function (e) {
+                try {
+                  const jsonData = JSON.parse(e.target.result);
+                  console.log("JSON đã tải:", jsonData); // Debug log
+                  generateSlides(jsonData);
+                } catch (error) {
+                  alert("Lỗi khi phân tích JSON: " + error.message);
+                  console.error("Lỗi JSON:", error);
+                }
+              };
+              reader.readAsText(file);
+            } else if (file.type.startsWith("image/")) {
+              const url = URL.createObjectURL(file);
+              const slide =
+                document.querySelector(".slide.active") ||
+                document.querySelector(".slide");
+              if (slide) {
+                const imageData = {
+                  type: "image",
+                  src: url,
+                  left: 50,
+                  top: 50,
+                  width: 200,
+                  height: 200,
+                  alt: file.name,
+                  objectFit: "contain",
+                  transition: "all 0.3s ease",
+                };
+                console.log("Tạo hình ảnh:", imageData); // Debug log
+                const imgElement = createElement(imageData);
+                if (imgElement) {
+                  slide.appendChild(imgElement);
+                } else {
+                  console.error("Không thể tạo phần tử hình ảnh");
+                }
+              } else {
+                alert("Vui lòng tạo một slide trước khi thêm ảnh!");
+              }
+            } else if (file.type.startsWith("audio/")) {
+              const url = URL.createObjectURL(file);
+              const slide =
+                document.querySelector(".slide.active") ||
+                document.querySelector(".slide");
+              if (slide) {
+                const audioData = {
+                  type: "audio",
+                  src: url,
+                  left: 50,
+                  top: 300,
+                  width: 300,
+                  height: 30,
+                  autoplay: false,
+                  loop: false,
+                };
+                console.log("Tạo âm thanh:", audioData); // Debug log
+                const audioElement = createElement(audioData);
+                if (audioElement) {
+                  slide.appendChild(audioElement);
+                }
+              } else {
+                alert("Vui lòng tạo một slide trước khi thêm âm thanh!");
+              }
+            } else {
+              alert(
+                "Tệp không được hỗ trợ! Vui lòng chọn JSON, ảnh hoặc âm thanh."
+              );
+            }
+          });
+        });
+
+      document
+        .getElementById("slidesContainer")
+        .addEventListener("click", function () {
+          currentSlide =
+            (currentSlide + 1) % document.querySelectorAll(".slide").length;
+          showSlide(currentSlide);
+        });
+    </script>
+  </body>
+</html>
